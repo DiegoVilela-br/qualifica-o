@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#172554">
+<title>Gerador de Fichas</title>
+<style>
+:root{font-family:Arial,Helvetica,sans-serif;color:#172033;background:#f3f5f9}
+*{box-sizing:border-box}
+body{margin:0;padding:24px}
+.wrap{max-width:1100px;margin:auto}
+header{margin-bottom:22px}
+h1{margin:0 0 7px;font-size:clamp(25px,4vw,34px)}
+header p{margin:0;color:#64748b;line-height:1.5}
+.layout{display:grid;grid-template-columns:minmax(280px,420px) minmax(0,1fr);gap:22px;align-items:start}
+.panel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px;box-shadow:0 8px 24px #0f172a0a}
+h2{font-size:18px;margin:0 0 16px}
+label{display:block;font-weight:700;font-size:13px;margin:13px 0 6px}
+input,textarea{width:100%;font:inherit;font-size:16px;padding:11px 12px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#0f172a}
+input:focus,textarea:focus{outline:3px solid #bfdbfe;border-color:#2563eb}
+input[type=file]{font-size:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button{border:0;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:700;cursor:pointer}
+.primary{background:#1d4ed8;color:#fff;width:100%;margin-top:18px}
+.secondary{background:#e2e8f0;color:#172033}
+.actions{display:flex;gap:10px;margin-top:12px}
+.actions button{flex:1}
+.note{font-size:12px;color:#64748b;line-height:1.45;margin:14px 0 0}
+.preview-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.preview-head h2{margin:0}
+.preview-box{background:#e8edf4;border-radius:12px;padding:12px;overflow:auto;text-align:center}
+canvas{display:block;width:min(100%,520px);height:auto;margin:auto;background:#fff;box-shadow:0 2px 12px #0f172a20}
+.status{font-size:13px;color:#166534;margin-top:10px;min-height:18px}
+@media(max-width:800px){body{padding:15px}.layout{grid-template-columns:1fr}.panel{padding:16px}}
+@media(max-width:380px){.grid2{grid-template-columns:1fr}.actions{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<h1>Gerador de Fichas</h1>
+<p>Envie uma fotografia, preencha os campos e gere uma imagem pronta para salvar.</p>
+</header>
+<div class="layout">
+<section class="panel">
+<h2>1. Preencha os dados</h2>
+<label for="photo">Fotografia</label>
+<input id="photo" type="file" accept="image/*">
+<label for="name">Nome completo</label><input id="name" maxlength="100" placeholder="Nome completo">
+<div class="grid2">
+<div><label for="rg">RG</label><input id="rg" maxlength="30" placeholder="RG"></div>
+<div><label for="nickname">Vulgo</label><input id="nickname" maxlength="50" placeholder="Vulgo"></div>
+</div>
+<label for="address">Endereço</label><input id="address" maxlength="160" placeholder="Endereço">
+<label for="occurrence">Ocorrência</label><textarea id="occurrence" rows="2" maxlength="220" placeholder="Descrição resumida da ocorrência"></textarea>
+<div class="grid2">
+<div><label for="article">Art.</label><input id="article" maxlength="50" placeholder="Artigo"></div>
+<div><label for="dp">DP</label><input id="dp" maxlength="60" placeholder="Delegacia"></div>
+</div>
+<div class="grid2">
+<div><label for="bopm">BOPM</label><input id="bopm" maxlength="40" placeholder="Número"></div>
+<div><label for="bopc">BOPC</label><input id="bopc" maxlength="40" placeholder="Número"></div>
+</div>
+<label for="date">Data</label><input id="date" type="date">
+<button class="primary" id="download">Gerar e baixar imagem PNG</button>
+<p class="note">A imagem e os dados são processados neste navegador. Esta versão não envia nem armazena informações em servidor. Utilize somente dados que você esteja autorizado a tratar.</p>
+</section>
+<section class="panel">
+<div class="preview-head"><h2>2. Pré-visualização</h2><button class="secondary" id="clear" type="button">Limpar</button></div>
+<div class="preview-box"><canvas id="canvas" width="1200" height="1600" aria-label="Prévia da ficha gerada"></canvas></div>
+<div class="status" id="status" aria-live="polite">A prévia é atualizada conforme você preenche os campos.</div>
+<div class="actions"><button class="secondary" id="downloadJpg" type="button">Baixar JPG</button></div>
+</section>
+</div>
+</div>
+<script>
+(() => {
+ const $ = id => document.getElementById(id);
+ const canvas = $('canvas'), ctx = canvas.getContext('2d');
+ let photo = null;
+ const fields = ['name','rg','nickname','address','occurrence','article','dp','bopm','bopc','date'];
+ function value(id){ const v=$(id).value.trim(); if(id==='date' && v){const [y,m,d]=v.split('-');return `${d}/${m}/${y}`;} return v || '—';}
+ function wrapText(text,x,y,maxWidth,lineHeight,maxLines=2){
+   const words=String(text).split(/\s+/); let line='', lines=[];
+   for(const word of words){const test=line?line+' '+word:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word;}else line=test;}
+   if(line)lines.push(line);
+   if(lines.length>maxLines){lines=lines.slice(0,maxLines);let last=lines[maxLines-1];while(ctx.measureText(last+'…').width>maxWidth&&last.length)last=last.slice(0,-1);lines[maxLines-1]=last+'…';}
+   lines.forEach((ln,i)=>ctx.fillText(ln,x,y+i*lineHeight));
+   return lines.length;
+ }
+ function draw(){
+   ctx.fillStyle='#fff';ctx.fillRect(0,0,1200,1600);
+   const photoArea={x:0,y:0,w:1200,h:900};
+   if(photo){
+     const scale=Math.min(photoArea.w/photo.width,photoArea.h/photo.height);
+     const w=photo.width*scale,h=photo.height*scale;
+     ctx.drawImage(photo,photoArea.x+(photoArea.w-w)/2,photoArea.y+(photoArea.h-h)/2,w,h);
+   }else{
+     ctx.fillStyle='#f1f5f9';ctx.fillRect(photoArea.x,photoArea.y,photoArea.w,photoArea.h);
+     ctx.fillStyle='#64748b';ctx.textAlign='center';ctx.font='bold 38px Arial';ctx.fillText('FOTOGRAFIA',600,455);ctx.textAlign='left';
+   }
+   const x=0, y=900, w=1200, bottom=1535;
+   ctx.strokeStyle='#111827';ctx.lineWidth=3;ctx.strokeRect(x,y,w,bottom-y);
+   ctx.fillStyle='#111827';ctx.textAlign='left';
+   const left=85,right=1115;
+   function row(label,val,yy,opts={}){
+     ctx.font='bold 36px Arial';ctx.fillText(label,left,yy);
+     const labelW=ctx.measureText(label).width+12;
+     ctx.font='34px Arial';
+     const start=left+labelW;
+     const max=right-start;
+     const count=wrapText(val,start,yy,Math.max(100,max),39,opts.lines||1);
+     const endY=yy+Math.max(0,count-1)*39+9;
+     ctx.beginPath();ctx.lineWidth=2.5;ctx.moveTo(start,endY);ctx.lineTo(right,endY);ctx.stroke();
+   }
+   row('NOME:',value('name'),970);
+   row('RG:',value('rg'),1055);
+   row('VULGO:',value('nickname'),1140);
+   row('END.:',value('address'),1225);
+   row('OCORRÊNCIA:',value('occurrence'),1310,{lines:2});
+   ctx.font='bold 34px Arial';ctx.fillText('ART.:',left,1410);
+   ctx.font='32px Arial';ctx.fillText(value('article'),left+115,1410);
+   ctx.beginPath();ctx.moveTo(left+110,1420);ctx.lineTo(500,1420);ctx.stroke();
+   ctx.font='bold 34px Arial';ctx.fillText('DP:',550,1410);
+   ctx.font='32px Arial';wrapText(value('dp'),625,1410,490,36,1);
+   ctx.beginPath();ctx.moveTo(620,1420);ctx.lineTo(right,1420);ctx.stroke();
+   ctx.font='bold 31px Arial';ctx.fillText('BOPM:',left,1490);
+   ctx.font='30px Arial';ctx.fillText(value('bopm'),190,1490);
+   ctx.beginPath();ctx.moveTo(185,1500);ctx.lineTo(430,1500);ctx.stroke();
+   ctx.font='bold 31px Arial';ctx.fillText('BOPC:',455,1490);
+   ctx.font='30px Arial';ctx.fillText(value('bopc'),575,1490);
+   ctx.beginPath();ctx.moveTo(570,1500);ctx.lineTo(800,1500);ctx.stroke();
+   ctx.font='bold 31px Arial';ctx.fillText('DATA:',830,1490);
+   ctx.font='30px Arial';ctx.fillText(value('date'),940,1490);
+   ctx.beginPath();ctx.moveTo(935,1500);ctx.lineTo(right,1500);ctx.stroke();
+ }
+ $('photo').addEventListener('change',e=>{
+   const file=e.target.files[0]; if(!file)return;
+   if(!file.type.startsWith('image/')){$('status').textContent='Selecione um arquivo de imagem válido.';return;}
+   const reader=new FileReader();
+   reader.onload=()=>{const img=new Image();img.onload=()=>{photo=img;draw();$('status').textContent='Fotografia carregada.';};img.onerror=()=>$('status').textContent='Não foi possível abrir essa imagem.';img.src=reader.result;};
+   reader.readAsDataURL(file);
+ });
+ fields.forEach(id=>$(id).addEventListener('input',draw));
+ function download(type){
+   draw();
+   const mime=type==='jpg'?'image/jpeg':'image/png';
+   const a=document.createElement('a');a.href=canvas.toDataURL(mime,.94);a.download=`ficha-identificacao.${type}`;a.click();
+   $('status').textContent=`Imagem ${type.toUpperCase()} gerada.`;
+ }
+ $('download').addEventListener('click',()=>download('png'));
+ $('downloadJpg').addEventListener('click',()=>download('jpg'));
+ $('clear').addEventListener('click',()=>{
+   fields.forEach(id=>$(id).value='');$('photo').value='';photo=null;draw();$('status').textContent='Formulário limpo.';
+ });
+ draw();
+})();
+</script>
+</body>
+</html>
